@@ -208,25 +208,25 @@ a { text-decoration: none; color: inherit; }
 .ftab.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 
 /* ─────────────────────────────────────────────
-   TIMELINE
+   TIMELINE HORIZONTAL
 ───────────────────────────────────────────── */
-.tl-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-.tl-controls label { font-size: 13px; color: var(--text2); }
-.tl-controls select { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: var(--radius-xs); font-size: 13px; cursor: pointer; outline: none; }
-.btn-sm { background: var(--blue); border: none; color: #fff; padding: 6px 14px; border-radius: var(--radius-xs); font-size: 13px; font-weight: 600; cursor: pointer; }
-.tl-month { font-size: 11px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: .08em; padding: 18px 0 8px; }
-.tl-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); cursor: default; }
-.tl-item.tappable { cursor: pointer; }
-.tl-item.tappable:active { opacity: .7; }
-.tl-item:last-child { border-bottom: none; }
-.tl-date { font-size: 11px; color: var(--text2); font-family: var(--mono); min-width: 34px; padding-top: 3px; }
-.tl-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
-.tl-body { flex: 1; min-width: 0; }
-.tl-name { font-size: 14px; font-weight: 500; }
-.tl-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
-.tl-right { text-align: right; flex-shrink: 0; }
-.tl-amount { font-family: var(--mono); font-size: 13px; font-weight: 600; }
-.tl-saldo { font-size: 11px; color: var(--text2); margin-top: 2px; font-family: var(--mono); }
+.tl-page { display: flex; flex-direction: column; padding: 0 !important; overflow: hidden; height: calc(100vh - 56px - env(safe-area-inset-bottom)); }
+#tl-header { padding: 12px 16px 8px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+#tl-cursor-date { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+#tl-cursor-saldos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.tl-saldo-pill { font-size: 11px; background: var(--bg3); border-radius: 99px; padding: 3px 10px; font-family: var(--mono); }
+.tl-saldo-pill span { color: var(--text2); margin-right: 4px; }
+#tl-cursor-movs { display: flex; flex-wrap: wrap; gap: 6px; min-height: 20px; }
+.tl-mov-chip { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--bg3); border: 1px solid var(--border); }
+.tl-mov-chip.ingreso { border-color: var(--green); color: var(--green); }
+.tl-mov-chip.gasto   { border-color: var(--red);   color: var(--red);   }
+#tl-scroll-wrap { flex: 1; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; cursor: grab; position: relative; }
+#tl-scroll-wrap:active { cursor: grabbing; }
+#tl-canvas-wrap { position: relative; height: 100%; }
+#tl-canvas { display: block; height: 100%; }
+#tl-cursor-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--blue); opacity: .8; pointer-events: none; transform: translateX(-50%); }
+#tl-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+#tl-range-label { font-size: 12px; color: var(--text2); }
 
 /* ─────────────────────────────────────────────
    FAB
@@ -465,13 +465,24 @@ button:disabled { opacity: .5; cursor: not-allowed; }
     <section class="page active" id="page-dashboard"></section>
     <section class="page" id="page-transacciones"></section>
     <section class="page" id="page-programadas"></section>
-    <section class="page" id="page-timeline">
-      <div class="tl-controls">
-        <label>Proyectar</label>
-        <select id="tl-meses"><option value="3">3 meses</option><option value="6" selected>6 meses</option><option value="12">12 meses</option><option value="24">24 meses</option></select>
-        <button class="btn-sm" id="btn-tl-refresh">Actualizar</button>
+    <section class="page tl-page" id="page-timeline">
+      <div id="tl-header">
+        <div id="tl-cursor-info">
+          <div id="tl-cursor-date"></div>
+          <div id="tl-cursor-saldos"></div>
+        </div>
+        <div id="tl-cursor-movs"></div>
       </div>
-      <div id="timeline-list"></div>
+      <div id="tl-scroll-wrap">
+        <div id="tl-canvas-wrap">
+          <canvas id="tl-canvas"></canvas>
+          <div id="tl-cursor-line"></div>
+        </div>
+      </div>
+      <div id="tl-footer">
+        <button class="btn-sm" id="btn-tl-today">Hoy</button>
+        <span id="tl-range-label"></span>
+      </div>
     </section>
     <section class="page" id="page-presupuestos"></section>
     <section class="page" id="page-objetivos"></section>
@@ -843,7 +854,6 @@ var State = {
   deudasFiltro: 'todas',
   editMode: null,
   saldarId: null, ejecutarId: null, eliminarData: null,
-  timelineLoaded: false,
 };
 
 // ══════════════════════════════════════════════════════
@@ -921,7 +931,6 @@ async function loadDynamic() {
   D.objetivos     = objs    || [];
   D.presupuestos  = pres    || [];
   D.deudas        = deudas  || [];
-  State.timelineLoaded = false;
 }
 
 // ══════════════════════════════════════════════════════
@@ -1042,237 +1051,317 @@ function renderProgramadas() {
 
 // ── Timeline ─────────────────────────────────────────
 function renderTimelinePage() {
-  if (State.timelineLoaded) { renderTimeline(); return; }
-  var l = document.getElementById('timeline-list');
-  l.innerHTML = '<div class="loader-wrap"><div class="loader-sm"></div></div>';
-  var meses = parseInt(document.getElementById('tl-meses').value) || 6;
-  generarTimeline(meses).then(function(evs) {
-    D.timeline = evs;
-    State.timelineLoaded = true;
-    renderTimeline();
-  }).catch(function(e) { l.innerHTML = emptyState('Error al calcular'); });
+  initTimeline();
 }
 
-function renderTimeline() {
-  var l = document.getElementById('timeline-list');
-  var items = D.timeline || [];
-  if (!items.length) { l.innerHTML = emptyState('No hay proyección'); return; }
-  var html = '', lastMonth = '';
-  items.forEach(function(ev) {
-    var mes = ev.fecha.substring(0, 7);
-    if (mes !== lastMonth) {
-      lastMonth = mes;
-      var parts = mes.split('-');
-      html += '<div class="tl-month">' + new Date(parts[0], parts[1]-1).toLocaleString('es', {month:'long', year:'numeric'}) + '</div>';
-    }
-    var t     = ev.tipo.toLowerCase();
-    var color = t === 'ingreso' ? 'var(--green)' : t === 'gasto' ? 'var(--red)' : t === 'objetivo' ? 'var(--yellow)' : 'var(--blue)';
-    var signo = t === 'ingreso' ? '+' : t === 'gasto' ? '−' : '';
-    var isTap = ev.origen === 'Programada' && ev.progId;
-    html += '<div class="tl-item' + (isTap ? ' tappable' : '') + '"' + (isTap ? ' data-detail-tipo="prog" data-detail-id="' + ev.progId + '"' : '') + '>';
-    html += '<div class="tl-date">' + ev.fecha.substring(5) + '</div>';
-    html += '<div class="tl-dot" style="background:' + color + '"></div>';
-    html += '<div class="tl-body"><div class="tl-name">' + esc(ev.nombre) + '</div>';
-    html += '<div class="tl-meta">' + ev.origen + (ev.cuentaOrigen ? ' · ' + ev.cuentaOrigen : '') + '</div></div>';
-    html += '<div class="tl-right">';
-    html += '<div class="tl-amount" style="color:' + color + '">' + signo + fmt(ev.importe) + '</div>';
-    html += '<div class="tl-saldo">→ ' + fmt(ev.saldoProyectado) + '</div>';
-    html += '</div></div>';
+// ── Timeline state ──────────────────────────────────────
+var TL = {
+  dias: [],        // array of {fecha, eventos:[], saldos:{cuentaId: saldo}}
+  colW: 44,        // px per day column
+  rowH: 52,        // px per account row
+  padTop: 32,      // header row height
+  cursorDay: null, // index of cursor
+  dragging: false,
+  dragStartX: 0,
+  dragScrollLeft: 0,
+};
+
+function initTimeline() {
+  var wrap = document.getElementById('tl-scroll-wrap');
+  if (!wrap) return;
+
+  // Build 60 days: 30 past + today + 29 future
+  var hoy     = new Date(); hoy.setHours(0,0,0,0);
+  var todayStr = fmtDate(hoy);
+  var dias    = [];
+  for (var i = -30; i <= 60; i++) {
+    var d = new Date(hoy); d.setDate(d.getDate() + i);
+    dias.push({ fecha: fmtDate(d), eventos: [], saldos: {} });
+  }
+  TL.dias = dias;
+
+  // Populate eventos from real transactions
+  D.transacciones.forEach(function(t) {
+    var day = dias.find(function(d) { return d.fecha === t.fecha; });
+    if (day) day.eventos.push({ nombre: t.descripcion || t.tipo, tipo: t.tipo, importe: parseFloat(t.importe), cuentaId: t.cuenta_origen, origen: 'real', id: t.id });
   });
-  l.innerHTML = html;
-}
 
-async function generarTimeline(meses) {
-  var hoy = new Date();
-  var limite = new Date(hoy); limite.setMonth(limite.getMonth() + meses);
-  var eventos = [];
-  var saldoTotal = D.cuentas.reduce(function(s, c) { return s + (parseFloat(c.saldo_actual) || 0); }, 0);
-
-  D.programadas.forEach(function(prog) {
+  // Populate eventos from programadas (próximos 60 días)
+  var limite = new Date(hoy); limite.setDate(limite.getDate() + 61);
+  D.programadas.filter(function(p){return p.activa;}).forEach(function(prog) {
     expandirProgramada(prog, hoy, limite).forEach(function(fecha) {
-      var cuenta = D.cuentas.find(function(c) { return c.id === prog.cuenta_origen; });
-      eventos.push({
-        fecha: fmtDate(fecha), nombre: prog.nombre, tipo: prog.tipo,
-        cuentaOrigen: cuenta ? cuenta.nombre : '',
-        importe: parseFloat(prog.importe), origen: 'Programada', progId: prog.id,
+      var f = fmtDate(fecha);
+      var day = dias.find(function(d) { return d.fecha === f; });
+      if (day) day.eventos.push({ nombre: prog.nombre, tipo: prog.tipo, importe: parseFloat(prog.importe), cuentaId: prog.cuenta_origen, origen: 'prog', id: prog.id });
+    });
+  });
+
+  // Calculate running saldo per account per day
+  var cuentas = D.cuentas;
+  // Start from saldo_actual (already accounts for past transactions)
+  var saldos = {};
+  cuentas.forEach(function(cu) { saldos[cu.id] = parseFloat(cu.saldo_actual) || 0; });
+
+  // Roll back to 30 days ago by subtracting future, adding past
+  // Simpler: calculate from saldo_inicial + all transactions up to each day
+  dias.forEach(function(day) {
+    // Apply events of this day
+    day.eventos.forEach(function(ev) {
+      if (!ev.cuentaId) return;
+      if (ev.tipo === 'Ingreso')    saldos[ev.cuentaId] = (saldos[ev.cuentaId] || 0) + ev.importe;
+      else if (ev.tipo === 'Gasto') saldos[ev.cuentaId] = (saldos[ev.cuentaId] || 0) - ev.importe;
+    });
+    // Snapshot saldos for this day
+    day.saldos = Object.assign({}, saldos);
+  });
+
+  // Build canvas
+  var canvas = document.getElementById('tl-canvas');
+  if (!canvas) return;
+  var cols   = dias.length;
+  var rows   = cuentas.length;
+  var width  = cols * TL.colW;
+  var height = TL.padTop + rows * TL.rowH + 20;
+
+  canvas.width  = width;
+  canvas.height = height;
+  canvas.style.width  = width + 'px';
+  canvas.style.height = height + 'px';
+  document.getElementById('tl-canvas-wrap').style.width  = width + 'px';
+  document.getElementById('tl-canvas-wrap').style.height = height + 'px';
+
+  drawTimeline();
+
+  // Scroll to today (index 30)
+  var todayIdx = dias.findIndex(function(d){return d.fecha === todayStr;});
+  TL.cursorDay = todayIdx >= 0 ? todayIdx : 30;
+
+  // Position cursor line in center of visible area
+  var scrollWrap = document.getElementById('tl-scroll-wrap');
+  var centerX    = TL.cursorDay * TL.colW + TL.colW/2;
+  var visibleW   = scrollWrap.clientWidth;
+  scrollWrap.scrollLeft = centerX - visibleW/2;
+  updateCursorLine();
+  updateCursorInfo();
+
+  // Bind events (remove old listeners by cloning)
+  var newWrap = wrap.cloneNode(false);
+  while (wrap.firstChild) newWrap.appendChild(wrap.firstChild);
+  wrap.parentNode.replaceChild(newWrap, wrap);
+
+  // Scroll → update cursor
+  newWrap.addEventListener('scroll', function() {
+    var visW   = newWrap.clientWidth;
+    var center = newWrap.scrollLeft + visW/2;
+    var dayIdx = Math.round((center - TL.colW/2) / TL.colW);
+    dayIdx = Math.max(0, Math.min(TL.dias.length-1, dayIdx));
+    if (dayIdx !== TL.cursorDay) {
+      TL.cursorDay = dayIdx;
+      updateCursorLine();
+      updateCursorInfo();
+    }
+  }, { passive: true });
+
+  // Bind today button
+  var btnToday = document.getElementById('btn-tl-today');
+  if (btnToday) {
+    btnToday.onclick = function() {
+      TL.cursorDay = todayIdx >= 0 ? todayIdx : 30;
+      var cX = TL.cursorDay * TL.colW + TL.colW/2;
+      var vW = document.getElementById('tl-scroll-wrap').clientWidth;
+      document.getElementById('tl-scroll-wrap').scrollTo({ left: cX - vW/2, behavior: 'smooth' });
+      updateCursorInfo();
+    };
+  }
+
+  // Range label
+  var first = dias[0].fecha, last = dias[dias.length-1].fecha;
+  var rangeEl = document.getElementById('tl-range-label');
+  if (rangeEl) rangeEl.textContent = fmtDateEs(first) + ' – ' + fmtDateEs(last);
+}
+
+function fmtDateEs(str) {
+  var d = new Date(str + 'T12:00:00');
+  return d.toLocaleDateString('es', { day:'numeric', month:'short' });
+}
+
+function drawTimeline() {
+  var canvas  = document.getElementById('tl-canvas');
+  if (!canvas) return;
+  var ctx     = canvas.getContext('2d');
+  var cuentas = D.cuentas;
+  var dias    = TL.dias;
+  var colW    = TL.colW;
+  var rowH    = TL.rowH;
+  var padTop  = TL.padTop;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  var isDark = true;
+  var clrBg      = '#0d1320';
+  var clrBg2     = '#111827';
+  var clrBorder  = 'rgba(255,255,255,.07)';
+  var clrText    = '#c8d3e8';
+  var clrText2   = '#6b7a94';
+  var clrToday   = 'rgba(77,143,255,.12)';
+  var clrGreen   = '#00d4a0';
+  var clrRed     = '#ff5c6a';
+  var clrBlue    = '#4d8fff';
+  var clrYellow  = '#ffc04d';
+  var rowColors  = [clrBlue, clrGreen, clrYellow, '#a78bfa', '#f87171'];
+
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  var todayStr = fmtDate(hoy);
+
+  // ── Background rows ──
+  cuentas.forEach(function(cu, ri) {
+    var y = padTop + ri * rowH;
+    ctx.fillStyle = ri % 2 === 0 ? clrBg : clrBg2;
+    ctx.fillRect(0, y, canvas.width, rowH);
+    // Row label (account name) — drawn on top later
+  });
+
+  // ── Column headers (dates) + vertical lines ──
+  ctx.font = '10px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  dias.forEach(function(day, ci) {
+    var x    = ci * colW;
+    var d    = new Date(day.fecha + 'T12:00:00');
+    var isToday = day.fecha === todayStr;
+    var isMon   = d.getDay() === 1;
+    var isFirst = d.getDate() === 1;
+
+    // Today highlight column
+    if (isToday) {
+      ctx.fillStyle = clrToday;
+      ctx.fillRect(x, 0, colW, canvas.height);
+    }
+
+    // Vertical grid lines
+    ctx.strokeStyle = clrBorder;
+    ctx.lineWidth   = isFirst ? 1.5 : 0.5;
+    ctx.beginPath(); ctx.moveTo(x, padTop); ctx.lineTo(x, canvas.height); ctx.stroke();
+
+    // Date label
+    if (isFirst || isMon || isToday || ci === 0) {
+      ctx.fillStyle = isToday ? clrBlue : (isFirst ? clrText : clrText2);
+      ctx.font = isFirst ? 'bold 10px system-ui' : '10px system-ui, sans-serif';
+      var label = isFirst ? d.toLocaleString('es',{month:'short',day:'numeric'}) : String(d.getDate());
+      ctx.fillText(label, x + colW/2, padTop - 6);
+    }
+  });
+
+  // ── Saldo lines per account ──
+  cuentas.forEach(function(cu, ri) {
+    var color  = rowColors[ri % rowColors.length];
+    var y0     = padTop + ri * rowH;
+    var yMid   = y0 + rowH/2;
+
+    // Collect saldo values to determine range
+    var saldoVals = dias.map(function(d){ return d.saldos[cu.id] || 0; });
+    var minS = Math.min.apply(null, saldoVals);
+    var maxS = Math.max.apply(null, saldoVals);
+    var range = maxS - minS || 1;
+    var pad   = rowH * 0.15;
+
+    function yForSaldo(s) {
+      return y0 + pad + (1 - (s - minS) / range) * (rowH - pad*2);
+    }
+
+    // Draw line
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 2;
+    ctx.lineJoin    = 'round';
+    dias.forEach(function(day, ci) {
+      var x = ci * colW + colW/2;
+      var y = yForSaldo(day.saldos[cu.id] || 0);
+      if (ci === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Draw event dots
+    dias.forEach(function(day, ci) {
+      var evs = day.eventos.filter(function(e){ return e.cuentaId === cu.id; });
+      if (!evs.length) return;
+      var x   = ci * colW + colW/2;
+      var y   = yForSaldo(day.saldos[cu.id] || 0);
+      var hasIn  = evs.some(function(e){return e.tipo==='Ingreso';});
+      var hasOut = evs.some(function(e){return e.tipo==='Gasto';});
+      var dotColor = hasIn && hasOut ? clrYellow : hasIn ? clrGreen : clrRed;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI*2);
+      ctx.fillStyle   = dotColor;
+      ctx.strokeStyle = clrBg;
+      ctx.lineWidth   = 1.5;
+      ctx.fill(); ctx.stroke();
+    });
+
+    // Row label on left (fixed — we'll overlay with HTML)
+  });
+
+  // ── Horizontal row dividers ──
+  cuentas.forEach(function(cu, ri) {
+    var y = padTop + (ri+1) * rowH;
+    ctx.strokeStyle = clrBorder;
+    ctx.lineWidth   = 1;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  });
+}
+
+function updateCursorLine() {
+  var line = document.getElementById('tl-cursor-line');
+  if (!line) return;
+  var dayIdx = TL.cursorDay;
+  var x      = dayIdx * TL.colW + TL.colW/2;
+  line.style.left = x + 'px';
+}
+
+function updateCursorInfo() {
+  var dayIdx = TL.cursorDay;
+  if (dayIdx < 0 || dayIdx >= TL.dias.length) return;
+  var day  = TL.dias[dayIdx];
+  var hoy  = new Date(); hoy.setHours(0,0,0,0);
+  var diff = Math.round((new Date(day.fecha+'T12:00:00') - hoy) / 86400000);
+  var diffStr = diff === 0 ? 'Hoy' : diff > 0 ? 'En ' + diff + ' días' : Math.abs(diff) + ' días atrás';
+
+  // Date
+  var dateEl = document.getElementById('tl-cursor-date');
+  if (dateEl) {
+    var d = new Date(day.fecha+'T12:00:00');
+    dateEl.textContent = d.toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'}) + ' · ' + diffStr;
+  }
+
+  // Saldos pills
+  var saldosEl = document.getElementById('tl-cursor-saldos');
+  if (saldosEl) {
+    var html = '';
+    D.cuentas.forEach(function(cu) {
+      var s = day.saldos[cu.id];
+      if (s === undefined) return;
+      var color = s >= 0 ? 'var(--green)' : 'var(--red)';
+      html += '<div class="tl-saldo-pill"><span>' + esc(cu.nombre) + '</span><strong style="color:' + color + '">' + fmt(s) + '</strong></div>';
+    });
+    saldosEl.innerHTML = html;
+  }
+
+  // Movimientos chips
+  var movsEl = document.getElementById('tl-cursor-movs');
+  if (movsEl) {
+    if (!day.eventos.length) {
+      movsEl.innerHTML = '<span style="font-size:11px;color:var(--text2)">Sin movimientos</span>';
+    } else {
+      var html = '';
+      day.eventos.forEach(function(ev) {
+        var cls = ev.tipo === 'Ingreso' ? 'ingreso' : ev.tipo === 'Gasto' ? 'gasto' : '';
+        var signo = ev.tipo === 'Ingreso' ? '+' : ev.tipo === 'Gasto' ? '−' : '';
+        html += '<div class="tl-mov-chip ' + cls + '">' + esc(ev.nombre) + ' ' + signo + fmt(ev.importe) + (ev.origen==='prog' ? ' 📅' : '') + '</div>';
       });
-    });
-  });
-
-  D.deudas.forEach(function(d) {
-    var pendiente = parseFloat(d.importe) - parseFloat(d.importe_pagado || 0);
-    if (!d.fecha_limite || pendiente <= 0) return;
-    var fl = new Date(d.fecha_limite + 'T12:00:00');
-    if (fl < hoy || fl > limite) return;
-    var contacto = D.contactos.find(function(c) { return c.id === d.contacto_id; });
-    eventos.push({
-      fecha: d.fecha_limite,
-      nombre: (d.tipo === 'Me deben' ? '💰 ' : '💸 ') + d.concepto + (contacto ? ' (' + contacto.nombre + ')' : ''),
-      tipo: d.tipo === 'Me deben' ? 'Ingreso' : 'Gasto',
-      cuentaOrigen: '', importe: pendiente, origen: 'Deuda',
-    });
-  });
-
-  D.objetivos.forEach(function(o) {
-    if (!o.fecha_limite || o.estado === 'completado') return;
-    var fl = new Date(o.fecha_limite + 'T12:00:00');
-    if (fl < hoy || fl > limite) return;
-    eventos.push({
-      fecha: o.fecha_limite, nombre: '🎯 ' + o.nombre,
-      tipo: 'Objetivo', cuentaOrigen: '', importe: parseFloat(o.restante) || 0, origen: 'Objetivo',
-    });
-  });
-
-  eventos.sort(function(a, b) { return a.fecha.localeCompare(b.fecha); });
-  var saldo = saldoTotal;
-  eventos.forEach(function(ev) {
-    if (ev.tipo === 'Ingreso') saldo += ev.importe;
-    else if (ev.tipo === 'Gasto') saldo -= ev.importe;
-    ev.saldoProyectado = Math.round(saldo * 100) / 100;
-  });
-  return eventos;
-}
-
-function expandirProgramada(prog, desde, hasta) {
-  var fechas = [];
-  if (!prog.fecha_inicio) return fechas;
-  var cursor = new Date(prog.fecha_inicio + 'T12:00:00');
-  var fin = prog.fecha_fin ? new Date(prog.fecha_fin + 'T12:00:00') : hasta;
-  var limite = fin < hasta ? fin : hasta;
-  if (prog.frecuencia === 'Única') {
-    if (cursor >= desde && cursor <= limite) fechas.push(new Date(cursor));
-    return fechas;
+      movsEl.innerHTML = html;
+    }
   }
-  while (cursor < desde) cursor = avanzarFecha(cursor, prog.frecuencia);
-  var seg = 0;
-  while (cursor <= limite && seg < 500) {
-    fechas.push(new Date(cursor)); cursor = avanzarFecha(cursor, prog.frecuencia); seg++;
-  }
-  return fechas;
 }
 
-function avanzarFecha(d, freq) {
-  var n = new Date(d);
-  if (freq === 'Semanal')    n.setDate(n.getDate()+7);
-  else if (freq === 'Quincenal') n.setDate(n.getDate()+15);
-  else if (freq === 'Mensual')   n.setMonth(n.getMonth()+1);
-  else if (freq === 'Bimestral') n.setMonth(n.getMonth()+2);
-  else if (freq === 'Trimestral')n.setMonth(n.getMonth()+3);
-  else if (freq === 'Semestral') n.setMonth(n.getMonth()+6);
-  else if (freq === 'Anual')     n.setFullYear(n.getFullYear()+1);
-  return n;
-}
-
-// ── Presupuestos ─────────────────────────────────────
-function renderPresupuestos() {
-  var el = document.getElementById('page-presupuestos');
-  if (!D.presupuestos.length) { el.innerHTML = emptyState('Sin presupuestos'); return; }
-  var html = '<div class="cards-grid single">';
-  D.presupuestos.forEach(function(p) {
-    var pct    = p.importe > 0 ? Math.min(100, Math.round((p.gastado || 0) / p.importe * 100)) : 0;
-    var cls    = pct >= 100 ? 'danger' : pct >= 80 ? 'warn' : '';
-    var cat    = D.categorias.find(function(c) { return c.id === p.categoria; });
-    html += '<div class="card tappable" data-detail-tipo="presupuesto" data-detail-id="' + p.id + '">';
-    html += '<div class="card-label">' + (cat ? cat.icono + ' ' : '') + esc(p.nombre) + '</div>';
-    html += '<div class="card-value">' + fmt(p.gastado || 0) + ' <span style="font-size:13px;color:var(--text2)">/ ' + fmt(p.importe) + '</span></div>';
-    html += '<div class="card-sub">' + esc(p.mes_anio) + ' · ' + pct + '%</div>';
-    html += '<div class="progress-bar"><div class="progress-fill ' + cls + '" style="width:' + pct + '%"></div></div></div>';
-  });
-  html += '</div>';
-  el.innerHTML = html;
-}
-
-// ── Objetivos ────────────────────────────────────────
-function renderObjetivos() {
-  var el = document.getElementById('page-objetivos');
-  if (!D.objetivos.length) { el.innerHTML = emptyState('Sin objetivos'); return; }
-  var html = '<div class="cards-grid single">';
-  D.objetivos.forEach(function(o) { html += objCard(o); });
-  html += '</div>';
-  el.innerHTML = html;
-}
-
-function objCard(o) {
-  var gastado      = parseFloat(o.gastado_real) || 0;
-  var comprometido = parseFloat(o.comprometido) || 0;
-  var total        = parseFloat(o.importe_objetivo) || 0;
-  var pctGastado   = total > 0 ? Math.min(100, Math.round(gastado / total * 100)) : 0;
-  var pctComp      = total > 0 ? Math.min(100 - pctGastado, Math.round(comprometido / total * 100)) : 0;
-  var emoji        = { completado:'✅', vencido:'🔴', casi:'🟡', en_curso:'🔵' }[o.estado] || '🔵';
-  var barComp      = comprometido > 0 ? '<div style="height:100%;width:' + pctComp + '%;background:var(--yellow);opacity:.7;border-radius:0 99px 99px 0"></div>' : '';
-  return '<div class="card card-full tappable" data-detail-tipo="objetivo" data-detail-id="' + o.id + '">' +
-    '<div class="card-label">' + emoji + ' ' + esc(o.nombre) + '</div>' +
-    '<div class="card-value">' + fmt(gastado) +
-      (comprometido > 0 ? ' <span style="font-size:12px;color:var(--yellow)">+' + fmt(comprometido) + ' comprometido</span>' : '') +
-      ' <span style="font-size:13px;color:var(--text2)">/ ' + fmt(total) + '</span></div>' +
-    '<div class="card-sub">Hasta ' + (o.fecha_limite || '—') + ' · ' + pctGastado + '% gastado' + (comprometido > 0 ? ' · ' + pctComp + '% comprometido' : '') + '</div>' +
-    '<div class="progress-bar" style="display:flex">' +
-      '<div class="progress-fill" style="width:' + pctGastado + '%;border-radius:' + (pctComp > 0 ? '99px 0 0 99px' : '99px') + '"></div>' +
-      barComp +
-    '</div></div>';
-}
-
-// ── Deudas ───────────────────────────────────────────
-function renderDeudas() {
-  var el = document.getElementById('deudas-list');
-  var lista = D.deudas.filter(function(d) {
-    return State.deudasFiltro === 'todas' || d.tipo === State.deudasFiltro;
-  });
-  el.innerHTML = lista.length ? '<div class="tx-list">' + lista.map(deudaItem).join('') + '</div>' : emptyState('Sin deudas');
-}
-
-function deudaItem(d) {
-  var contacto = D.contactos.find(function(c) { return c.id === d.contacto_id; });
-  var nombre   = contacto ? contacto.nombre : d.contacto_id || '—';
-  var pendiente= parseFloat(d.importe) - parseFloat(d.importe_pagado || 0);
-  var cls      = d.tipo === 'Me deben' ? 'me-deben' : 'yo-debo';
-  var signo    = d.tipo === 'Me deben' ? '+' : '−';
-  var icono    = d.tipo === 'Me deben' ? '💰' : '💸';
-  return '<div class="tx-item" data-detail-tipo="deuda" data-detail-id="' + d.id + '">' +
-    '<div class="tx-icon ' + cls + '">' + icono + '</div>' +
-    '<div class="tx-info"><div class="tx-name">' + esc(d.concepto) + (pendiente <= 0 ? ' ✅' : '') + '</div>' +
-    '<div class="tx-meta">' + d.tipo + ' · ' + esc(nombre) + (d.fecha_limite ? ' · ' + d.fecha_limite : '') + '</div></div>' +
-    '<div class="tx-amount ' + cls + '">' + signo + fmt(pendiente) + '</div></div>';
-}
-
-// ── Contactos ────────────────────────────────────────
-function renderContactos() {
-  var el = document.getElementById('page-contactos');
-  if (!D.contactos.length) { el.innerHTML = emptyState('Sin contactos'); return; }
-  var html = '<div class="cards-grid">';
-  D.contactos.forEach(function(c) {
-    var nd = D.deudas.filter(function(d) { return d.contacto_id === c.id && (parseFloat(d.importe) - parseFloat(d.importe_pagado||0)) > 0; }).length;
-    html += '<div class="card tappable" data-detail-tipo="contacto" data-detail-id="' + c.id + '">';
-    html += '<div class="card-label">' + esc(c.relacion) + '</div>';
-    html += '<div class="card-value" style="font-size:17px">' + esc(c.nombre) + '</div>';
-    html += '<div class="card-sub">' + (nd ? nd + ' deuda(s)' : 'Sin deudas') + '</div>';
-    if (c.telefono) html += '<div class="card-sub">📞 ' + esc(c.telefono) + '</div>';
-    html += '</div>';
-  });
-  html += '</div>';
-  el.innerHTML = html;
-}
-
-// ── TX item helper ───────────────────────────────────
-function txItem(t) {
-  var tipo = t.tipo.toLowerCase();
-  var signo = tipo === 'ingreso' ? '+' : tipo === 'gasto' ? '−' : '⇄';
-  var cat  = D.categorias.find(function(c) { return c.id === t.categoria; });
-  var icono = cat ? cat.icono : (tipo === 'ingreso' ? '💰' : tipo === 'gasto' ? '💸' : '↔️');
-  var desc  = t.descripcion || (cat ? cat.nombre : t.tipo);
-  var cuenta = D.cuentas.find(function(c) { return c.id === t.cuenta_origen; });
-  return '<div class="tx-item" data-detail-tipo="tx" data-detail-id="' + t.id + '">' +
-    '<div class="tx-icon ' + tipo + '">' + icono + '</div>' +
-    '<div class="tx-info"><div class="tx-name">' + esc(desc) + '</div>' +
-    '<div class="tx-meta">' + t.fecha + (cuenta ? ' · ' + esc(cuenta.nombre) : '') + '</div></div>' +
-    '<div class="tx-amount ' + tipo + '">' + signo + fmt(t.importe) + '</div></div>';
-}
-
-function card(icon, label, value, color, sub) {
-  return '<div class="card"><div class="card-label">' + label + '</div>' +
-    '<div class="card-value ' + (color||'') + '">' + value + '</div>' +
-    (sub ? '<div class="card-sub">' + sub + '</div>' : '') + '</div>';
-}
 
 // ══════════════════════════════════════════════════════
 //  DETAIL PANEL
@@ -1570,10 +1659,7 @@ function bindAll() {
   });
 
   // Timeline refresh
-  document.getElementById('btn-tl-refresh').addEventListener('click', function() {
-    State.timelineLoaded = false;
-    renderTimelinePage();
-  });
+  // timeline refresh handled by initTimeline
 
   // Form saves — onclick para evitar listeners duplicados
   document.getElementById('btn-save-tx').onclick           = saveTx;
