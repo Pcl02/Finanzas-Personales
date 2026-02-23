@@ -962,6 +962,43 @@ function renderPage(page) {
   if (page === 'timeline')      renderTimelinePage();
 }
 
+// ── Render helpers ───────────────────────────────────
+function txItem(t) {
+  var tipo = t.tipo.toLowerCase();
+  var signo = tipo === 'ingreso' ? '+' : tipo === 'gasto' ? '−' : '⇄';
+  var cat  = D.categorias.find(function(c) { return c.id === t.categoria; });
+  var icono = cat ? cat.icono : (tipo === 'ingreso' ? '💰' : tipo === 'gasto' ? '💸' : '↔️');
+  var desc  = t.descripcion || (cat ? cat.nombre : t.tipo);
+  var cuenta = D.cuentas.find(function(c) { return c.id === t.cuenta_origen; });
+  return '<div class="tx-item" data-detail-tipo="tx" data-detail-id="' + t.id + '">' +
+    '<div class="tx-icon ' + tipo + '">' + icono + '</div>' +
+    '<div class="tx-info"><div class="tx-name">' + esc(desc) + '</div>' +
+    '<div class="tx-meta">' + t.fecha + (cuenta ? ' · ' + esc(cuenta.nombre) : '') + '</div></div>' +
+    '<div class="tx-amount ' + tipo + '">' + signo + fmt(t.importe) + '</div></div>';
+}
+
+function card(icon, label, value, color, sub) {
+  return '<div class="card"><div class="card-label">' + label + '</div>' +
+    '<div class="card-value ' + (color||'') + '">' + value + '</div>' +
+    (sub ? '<div class="card-sub">' + sub + '</div>' : '') + '</div>';
+}
+
+function deudaItem(d) {
+  var contacto = D.contactos.find(function(c) { return c.id === d.contacto_id; });
+  var nombre   = contacto ? contacto.nombre : d.contacto_id || '—';
+  var pendiente= parseFloat(d.importe) - parseFloat(d.importe_pagado || 0);
+  var cls      = d.tipo === 'Me deben' ? 'me-deben' : 'yo-debo';
+  var signo    = d.tipo === 'Me deben' ? '+' : '−';
+  var icono    = d.tipo === 'Me deben' ? '💰' : '💸';
+  return '<div class="tx-item" data-detail-tipo="deuda" data-detail-id="' + d.id + '">' +
+    '<div class="tx-icon ' + cls + '">' + icono + '</div>' +
+    '<div class="tx-info"><div class="tx-name">' + esc(d.concepto) + (pendiente <= 0 ? ' ✅' : '') + '</div>' +
+    '<div class="tx-meta">' + d.tipo + ' · ' + esc(nombre) + (d.fecha_limite ? ' · ' + d.fecha_limite : '') + '</div></div>' +
+    '<div class="tx-amount ' + cls + '">' + signo + fmt(pendiente) + '</div></div>';
+}
+
+function emptyState(msg) { return '<div class="empty-state"><div class="empty-text">' + msg + '</div></div>'; }
+
 // ── Dashboard ────────────────────────────────────────
 function renderDashboard() {
   var el = document.getElementById('page-dashboard');
@@ -1045,6 +1082,83 @@ function renderProgramadas() {
     html += '<div class="tx-meta">' + p.frecuencia + ' · desde ' + p.fecha_inicio + '</div></div>';
     html += '<div class="tx-amount ' + t + '">' + s + fmt(p.importe) + '</div></div>';
   });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ── Deudas ───────────────────────────────────────────
+function renderDeudas() {
+  var el = document.getElementById('deudas-list');
+  var lista = D.deudas.filter(function(d) {
+    return State.deudasFiltro === 'todas' || d.tipo === State.deudasFiltro;
+  });
+  el.innerHTML = lista.length ? '<div class="tx-list">' + lista.map(deudaItem).join('') + '</div>' : emptyState('Sin deudas');
+}
+
+// ── Contactos ────────────────────────────────────────
+function renderContactos() {
+  var el = document.getElementById('page-contactos');
+  if (!D.contactos.length) { el.innerHTML = emptyState('Sin contactos'); return; }
+  var html = '<div class="cards-grid">';
+  D.contactos.forEach(function(c) {
+    var nd = D.deudas.filter(function(d) { return d.contacto_id === c.id && (parseFloat(d.importe) - parseFloat(d.importe_pagado||0)) > 0; }).length;
+    html += '<div class="card tappable" data-detail-tipo="contacto" data-detail-id="' + c.id + '">';
+    html += '<div class="card-label">' + esc(c.relacion) + '</div>';
+    html += '<div class="card-value" style="font-size:17px">' + esc(c.nombre) + '</div>';
+    html += '<div class="card-sub">' + (nd ? nd + ' deuda(s)' : 'Sin deudas') + '</div>';
+    if (c.telefono) html += '<div class="card-sub">📞 ' + esc(c.telefono) + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+
+function objCard(o) {
+  var gastado      = parseFloat(o.gastado_real) || 0;
+  var comprometido = parseFloat(o.comprometido) || 0;
+  var total        = parseFloat(o.importe_objetivo) || 0;
+  var pctGastado   = total > 0 ? Math.min(100, Math.round(gastado / total * 100)) : 0;
+  var pctComp      = total > 0 ? Math.min(100 - pctGastado, Math.round(comprometido / total * 100)) : 0;
+  var emoji        = { completado:'✅', vencido:'🔴', casi:'🟡', en_curso:'🔵' }[o.estado] || '🔵';
+  var barComp      = comprometido > 0 ? '<div style="height:100%;width:' + pctComp + '%;background:var(--yellow);opacity:.7;border-radius:0 99px 99px 0"></div>' : '';
+  return '<div class="card card-full tappable" data-detail-tipo="objetivo" data-detail-id="' + o.id + '">' +
+    '<div class="card-label">' + emoji + ' ' + esc(o.nombre) + '</div>' +
+    '<div class="card-value">' + fmt(gastado) +
+      (comprometido > 0 ? ' <span style="font-size:12px;color:var(--yellow)">+' + fmt(comprometido) + ' comprometido</span>' : '') +
+      ' <span style="font-size:13px;color:var(--text2)">/ ' + fmt(total) + '</span></div>' +
+    '<div class="card-sub">Hasta ' + (o.fecha_limite || '—') + ' · ' + pctGastado + '% gastado' + (comprometido > 0 ? ' · ' + pctComp + '% comprometido' : '') + '</div>' +
+    '<div class="progress-bar" style="display:flex">' +
+      '<div class="progress-fill" style="width:' + pctGastado + '%;border-radius:' + (pctComp > 0 ? '99px 0 0 99px' : '99px') + '"></div>' +
+      barComp +
+    '</div></div>';
+}
+
+// ── Presupuestos ─────────────────────────────────────
+function renderPresupuestos() {
+  var el = document.getElementById('page-presupuestos');
+  if (!D.presupuestos.length) { el.innerHTML = emptyState('Sin presupuestos'); return; }
+  var html = '<div class="cards-grid single">';
+  D.presupuestos.forEach(function(p) {
+    var pct    = p.importe > 0 ? Math.min(100, Math.round((p.gastado || 0) / p.importe * 100)) : 0;
+    var cls    = pct >= 100 ? 'danger' : pct >= 80 ? 'warn' : '';
+    var cat    = D.categorias.find(function(c) { return c.id === p.categoria; });
+    html += '<div class="card tappable" data-detail-tipo="presupuesto" data-detail-id="' + p.id + '">';
+    html += '<div class="card-label">' + (cat ? cat.icono + ' ' : '') + esc(p.nombre) + '</div>';
+    html += '<div class="card-value">' + fmt(p.gastado || 0) + ' <span style="font-size:13px;color:var(--text2)">/ ' + fmt(p.importe) + '</span></div>';
+    html += '<div class="card-sub">' + esc(p.mes_anio) + ' · ' + pct + '%</div>';
+    html += '<div class="progress-bar"><div class="progress-fill ' + cls + '" style="width:' + pct + '%"></div></div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// ── Objetivos ────────────────────────────────────────
+function renderObjetivos() {
+  var el = document.getElementById('page-objetivos');
+  if (!D.objetivos.length) { el.innerHTML = emptyState('Sin objetivos'); return; }
+  var html = '<div class="cards-grid single">';
+  D.objetivos.forEach(function(o) { html += objCard(o); });
   html += '</div>';
   el.innerHTML = html;
 }
